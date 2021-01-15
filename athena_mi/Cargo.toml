@@ -1,0 +1,17 @@
+[package]
+name = "athena_mi"
+version = "0.1.0"
+authors = ["Alexander Lachmann <32603869+lachmann12@users.noreply.github.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+csv = "1.1"
+serde = { version = "1", features = ["derive"] }
+clap = "2.33.3"
+wavelet-matrix = "0.4.7"
+rand = "0.7.3"
+frank = "0.1.3"
+threadpool = "1.8.1"
+crossbeam="0.8.0"
