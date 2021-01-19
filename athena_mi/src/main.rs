@@ -12,6 +12,7 @@ use rand::Rng;
 use frank::Ranking;
 
 use std::sync::{Arc, RwLock};
+use pbr::ProgressBar;
 
 mod splinemi;
 
@@ -163,7 +164,7 @@ fn main() {
     let lock_spline = Arc::new(RwLock::new(spline_probabilities.clone()));
     let lock_gene_names = Arc::new(RwLock::new(gene_names.clone()));
 
-    for tg in 0..test_sample_count as usize {
+    for tg in 0..arr_rank.len() as usize {
         let tx = tx.clone();
         let c_lock_arr = Arc::clone(&lock_arr);
         let c_lock_spline = Arc::clone(&lock_spline);
@@ -178,11 +179,11 @@ fn main() {
             let mut mi = vec![0f32; gene_names.len()];
 
             let gene_a = &arr_rank[tg];
-            let mut a_splines = vec![0i32; 3];
+            let mut a_splines = vec![0 as usize; 3];
             let mut a_prob = vec![0f32; 3];
-            let mut a_splines_all = vec![vec![0i32; 3]; gene_a.len()];
+            let mut a_splines_all = vec![vec![0 as usize; 3]; gene_a.len()];
             let mut a_prob_all = vec![vec![0f32; 3]; gene_a.len()];
-            let mut a_index_all = vec![0i32; gene_a.len()];
+            let mut a_index_all = vec![0 as usize; gene_a.len()];
             
             for l in 0..gene_a.len() {
                 let a_index = retrieve_spline_probs(gene_a[l]-1, &mut a_splines, &mut a_prob, &spline_prob);
@@ -194,25 +195,33 @@ fn main() {
                 tmi = mi_compute_pre(&a_splines_all, &a_prob_all, &a_index_all, &arr_rank[g], &spline_prob, h1h2, &mut bin_probs, number_bins as usize);
                 mi[g] = tmi;
             }
-            tx.send((tg, mi)).expect("Could not send data!");
+            tx.send((tg, mi.clone())).expect("Could not send data!");
         });
     }
 
+    let mut mi_results = vec![];
+    let mut mi_genes = vec![];
+    let mut pb = ProgressBar::new(arr_rank.len() as u64);
+
     drop(tx);
     for t in rx.iter() {
+        pb.inc();
         let (tg, mi) = t;
-        println!("{:?}", tg);
+        mi_genes.push(tg);
+        mi_results.push(mi.clone());
+        //println!("mi len: {}", mi_results.len());
     }
+    pb.finish_print("Completed MI calculations");
     println!("MI Time: {:.2}s", (now.elapsed().as_millis() as f32/1000.0));
 
-    //let now = Instant::now();
-    //if let Err(e) = write_to_file("../files/foo.csv", gene_names, sample_names, arr_rank) {
-    //    eprintln!("{}", e)
-    //}
-    //println!("Print rank time: {}ms", now.elapsed().as_millis());
+    let now = Instant::now();
+    if let Err(e) = write_to_file("../files/mi_test_10k.csv", gene_names, mi_genes, mi_results) {
+        eprintln!("{}", e)
+    }
+    println!("Print rank time: {}ms", now.elapsed().as_millis());
 }
 
-fn mi_compute_pre(a_splines_all: &Vec<Vec<i32>>, a_prob_all: &Vec<Vec<f32>>, a_index_all: &Vec<i32>, gene_b: &Vec<i32>, spline_prob: &Vec<Vec<f32>>, h1h2: f32, bin_probs: &mut [[f32; 50]; 50], bin_number: usize) -> f32 {
+fn mi_compute_pre(a_splines_all: &Vec<Vec<usize>>, a_prob_all: &Vec<Vec<f32>>, a_index_all: &Vec<usize>, gene_b: &Vec<i32>, spline_prob: &Vec<Vec<f32>>, h1h2: f32, bin_probs: &mut [[f32; 50]; 50], bin_number: usize) -> f32 {
     
     for k in 0..bin_number {
         for v in 0..bin_number {
@@ -220,60 +229,52 @@ fn mi_compute_pre(a_splines_all: &Vec<Vec<i32>>, a_prob_all: &Vec<Vec<f32>>, a_i
         }
     }
 
-    //let mut a_splines = [0i32; 3];
-    //let mut a_prob = [0f32; 3];
-    let mut b_splines = [0i32; 3];
+    let mut b_splines = [0 as usize; 3];
     let mut b_prob = [0f32; 3];
 
     for l in 0..gene_b.len() {
-        //let a_index = retrieve_spline_probs(gene_a[l]-1, &mut a_splines, &mut a_prob, spline_prob);
         let b_index = retrieve_spline_probs(gene_b[l]-1, &mut b_splines, &mut b_prob, spline_prob);
         let a_index = &a_index_all[l];
         let a_splines = &a_splines_all[l];
         let a_prob = &a_prob_all[l];
         for i in 0..*a_index {
             for j in 0..b_index {
-                bin_probs[a_splines[i as usize] as usize][b_splines[j as usize] as usize] += a_prob[i as usize]*b_prob[j as usize];
+                bin_probs[a_splines[i]][b_splines[j]] += a_prob[i]*b_prob[j];
             }
         }
     }
-
-    for k in 0..bin_number {
-        for v in 0..bin_number {
-            bin_probs[k][v] = bin_probs[k][v]/(gene_b.len() as f32);
-        }
-    }
-
-    let mut h12 = 0.0;
+    
+    let mut mi = 0.0;
+    let sq = (1.0/bin_number as f32)*(1.0/bin_number as f32);
+    let norm = (gene_b.len() as f32);
     for k in 0..bin_number {
         for v in 0..bin_number {
             if bin_probs[k][v] != 0.0 {
-                h12 -= bin_probs[k][v]*bin_probs[k][v].log2();
+                let mut bp = bin_probs[k][v]/norm;
+                mi += bp*((bp/sq).log2());
             }
         }
     }
 
-    let mi = h1h2 - h12;
-                
     return mi;
 }
 
-fn retrieve_spline_probs(g1: i32, vv1: &mut [i32], vv2: &mut [f32], spline_prob: &Vec<Vec<f32>>) -> i32 {
+fn retrieve_spline_probs(g1: i32, vv1: &mut [usize], vv2: &mut [f32], spline_prob: &Vec<Vec<f32>>) -> usize {
     let mut index = 0;
     let mut p = 0.0;
     let sp = &spline_prob[g1 as usize];
     for i in 0..sp.len() {
         p = sp[i];
         if sp[i] != 0.0 {
-            vv1[index] = i as i32;
+            vv1[index] = i;
             vv2[index] = p;
-            index = index+1 ;
+            index = index+1;
         }
         else if index > 0 {
             break;
         }
     }
-    return index as i32;
+    return index;
 }
 
 fn mi_compute(gene_a: &Vec<i32>, gene_b: &Vec<i32>, spline_prob: &Vec<Vec<f32>>, h1h2: f32, bin_probs: &mut [[f32; 50]; 50], bin_number: usize) -> f32 {
@@ -284,9 +285,9 @@ fn mi_compute(gene_a: &Vec<i32>, gene_b: &Vec<i32>, spline_prob: &Vec<Vec<f32>>,
         }
     }
 
-    let mut a_splines = [0i32; 3];
+    let mut a_splines = [0 as usize; 3];
     let mut a_prob = [0f32; 3];
-    let mut b_splines = [0i32; 3];
+    let mut b_splines = [0 as usize; 3];
     let mut b_prob = [0f32; 3];
 
     for l in 0..gene_a.len() {
@@ -295,7 +296,7 @@ fn mi_compute(gene_a: &Vec<i32>, gene_b: &Vec<i32>, spline_prob: &Vec<Vec<f32>>,
         
         for i in 0..b_index {
             for j in 0..b_index {
-                bin_probs[a_splines[i as usize] as usize][b_splines[j as usize] as usize] += a_prob[i as usize]*b_prob[j as usize];
+                bin_probs[a_splines[i as usize]][b_splines[j as usize]] += a_prob[i as usize]*b_prob[j as usize];
             }
         }
     }
@@ -321,24 +322,24 @@ fn mi_compute(gene_a: &Vec<i32>, gene_b: &Vec<i32>, spline_prob: &Vec<Vec<f32>>,
 }
 
 
-fn write_to_file(path: &str, genes: Vec<String>, samples: Vec<&str>, data: Vec<Vec<i32>>) -> Result<(), Box<dyn Error>> {
+fn write_to_file(path: &str, genes: Vec<String>, mi_genes: Vec<usize>, data: Vec<Vec<f32>>) -> Result<(), Box<dyn Error>> {
     
-    let f = File::create("../files/bufout.tsv").expect("Unable to create file");
+    let f = File::create(path).expect("Unable to create file");
     let mut f = BufWriter::new(f);
 
-    for i in 0..samples.len() {
+    for i in 0..mi_genes.len() {
         if i > 0 {
             f.write_all("\t".as_bytes()).expect("Unable to write data");
         }
-        f.write_all(samples[i].as_bytes()).expect("Unable to write data");
+        f.write_all(genes[mi_genes[i]].as_bytes()).expect("Unable to write data");
     }
     f.write_all("\n".as_bytes()).expect("Unable to write data");
 
     for i in 0..genes.len() {
         f.write_all(genes[i].as_bytes()).expect("Unable to write data");
-        for j in 0..samples.len() {
-            f.write("\t".as_bytes());
-            f.write((data[i][j].to_string()).as_bytes());
+        for j in 0..mi_genes.len() {
+            f.write_all("\t".as_bytes());
+            f.write_all((data[j][i].to_string()).as_bytes()).expect("Unable to write data");
         }
         f.write_all("\n".as_bytes()).expect("Unable to write data");
     }
