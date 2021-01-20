@@ -1,4 +1,3 @@
-
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::time::{Instant};
@@ -7,6 +6,7 @@ use threadpool::ThreadPool;
 use std::sync::mpsc::channel;
 
 use std::error::Error;
+use std::cmp;
 
 use rand::Rng;
 use frank::Ranking;
@@ -34,7 +34,7 @@ pub fn cli<'a>() -> clap::ArgMatches<'a> {
       .arg(
         clap::Arg::with_name("column-delimiter")
           .value_name("DELIMITER")
-          .short("c")
+          .short("d")
           .long("column-delimiter")
           .takes_value(true)
           .required(false)
@@ -67,6 +67,15 @@ pub fn cli<'a>() -> clap::ArgMatches<'a> {
           .required(false)
           .help("Number of bins.")
       )
+      .arg(
+        clap::Arg::with_name("sample-cutoff")
+          .value_name("cutoff")
+          .short("c")
+          .long("sample-cutoff")
+          .takes_value(true)
+          .required(false)
+          .help("Number of samples")
+      )
       .get_matches()
 }
 
@@ -76,6 +85,7 @@ fn main() {
     let column_delimiter = matches.value_of("column-delimiter").unwrap_or("\t");
     let thread_count = matches.value_of("thread-number").unwrap_or("4").parse::<usize>().unwrap();
     let test_sample_count = matches.value_of("test-sample-count").unwrap_or("12").parse::<usize>().unwrap();
+    let sample_cutoff = matches.value_of("sample-cutoff").unwrap_or("1000000").parse::<usize>().unwrap();
 
     let now = Instant::now();
 
@@ -90,23 +100,23 @@ fn main() {
     let ncols = sample_names.len();
     
     // preallocate the array and read the data into it
-    let mut arr = vec![vec![0f32; nrows]; ncols];
+    let mut arr = vec![vec![0f32; nrows]; cmp::min(sample_cutoff, ncols)];
     
     let mut gene_names: Vec<String> = vec!["".to_string(); nrows];
     let mut rng = rand::thread_rng();
 
     for (i, line) in f.lines().enumerate() {
         let lw = line.unwrap();
-        //println!("ok: {}",lw);
         for (j, number) in lw.split(column_delimiter).enumerate() {
             let entry = number.trim();
-            //println!("Val: col={}, n={}", j, entry);
-            if j == 0 {
-                gene_names[i] = String::from(entry);
-            }
-            else{
-                arr[j-1][i] = entry.parse().unwrap();
-                arr[j-1][i] = arr[j-1][i] + rng.gen::<f32>()/100000.0;
+            if cmp::min(sample_cutoff, ncols) > j {
+                if j == 0 {
+                    gene_names[i] = String::from(entry);
+                }
+                else {
+                    arr[j-1][i] = entry.parse().unwrap();
+                    arr[j-1][i] = arr[j-1][i] + rng.gen::<f32>()/100000.0;
+                }
             }
         }
     }
@@ -147,11 +157,8 @@ fn main() {
         arr_rank[i] = rankround;
     }
     
-    
     println!("Rank Time: {}ms", now.elapsed().as_millis());
 
-    let h1h2 =  - 2.0/(number_bins as f32)*(1.0/(number_bins as f32)).log2();
-    
     let now = Instant::now();
     
     let mut tmi = 0.0;
@@ -192,7 +199,7 @@ fn main() {
                 a_index_all[l] = a_index;
             }
             for g in 0..gene_names.len() {
-                tmi = mi_compute_pre(&a_splines_all, &a_prob_all, &a_index_all, &arr_rank[g], &spline_prob, h1h2, &mut bin_probs, number_bins as usize);
+                tmi = mi_compute(&a_splines_all, &a_prob_all, &a_index_all, &arr_rank[g], &spline_prob, &mut bin_probs, number_bins as usize);
                 mi[g] = tmi;
             }
             tx.send((tg, mi.clone())).expect("Could not send data!");
@@ -209,7 +216,6 @@ fn main() {
         let (tg, mi) = t;
         mi_genes.push(tg);
         mi_results.push(mi.clone());
-        //println!("mi len: {}", mi_results.len());
     }
     pb.finish_print("Completed MI calculations");
     println!("MI Time: {:.2}s", (now.elapsed().as_millis() as f32/1000.0));
@@ -221,7 +227,7 @@ fn main() {
     println!("Print rank time: {}ms", now.elapsed().as_millis());
 }
 
-fn mi_compute_pre(a_splines_all: &Vec<Vec<usize>>, a_prob_all: &Vec<Vec<f32>>, a_index_all: &Vec<usize>, gene_b: &Vec<i32>, spline_prob: &Vec<Vec<f32>>, h1h2: f32, bin_probs: &mut [[f32; 50]; 50], bin_number: usize) -> f32 {
+fn mi_compute(a_splines_all: &Vec<Vec<usize>>, a_prob_all: &Vec<Vec<f32>>, a_index_all: &Vec<usize>, gene_b: &Vec<i32>, spline_prob: &Vec<Vec<f32>>, bin_probs: &mut [[f32; 50]; 50], bin_number: usize) -> f32 {
     
     for k in 0..bin_number {
         for v in 0..bin_number {
@@ -276,51 +282,6 @@ fn retrieve_spline_probs(g1: i32, vv1: &mut [usize], vv2: &mut [f32], spline_pro
     }
     return index;
 }
-
-fn mi_compute(gene_a: &Vec<i32>, gene_b: &Vec<i32>, spline_prob: &Vec<Vec<f32>>, h1h2: f32, bin_probs: &mut [[f32; 50]; 50], bin_number: usize) -> f32 {
-    
-    for k in 0..bin_number {
-        for v in 0..bin_number {
-            bin_probs[k][v] = 0.0;
-        }
-    }
-
-    let mut a_splines = [0 as usize; 3];
-    let mut a_prob = [0f32; 3];
-    let mut b_splines = [0 as usize; 3];
-    let mut b_prob = [0f32; 3];
-
-    for l in 0..gene_a.len() {
-        //let a_index = retrieve_spline_probs(gene_a[l]-1, &mut a_splines, &mut a_prob, spline_prob);
-        let b_index = retrieve_spline_probs(gene_b[l]-1, &mut b_splines, &mut b_prob, spline_prob);
-        
-        for i in 0..b_index {
-            for j in 0..b_index {
-                bin_probs[a_splines[i as usize]][b_splines[j as usize]] += a_prob[i as usize]*b_prob[j as usize];
-            }
-        }
-    }
-
-    for k in 0..bin_number {
-        for v in 0..bin_number {
-            bin_probs[k][v] = bin_probs[k][v]/(gene_a.len() as f32);
-        }
-    }
-
-    let mut h12 = 0.0;
-    for k in 0..bin_number {
-        for v in 0..bin_number {
-            if bin_probs[k][v] != 0.0 {
-                h12 -= bin_probs[k][v]*bin_probs[k][v].log2();
-            }
-        }
-    }
-
-    let mi = h1h2 - h12;
-                
-    return mi;
-}
-
 
 fn write_to_file(path: &str, genes: Vec<String>, mi_genes: Vec<usize>, data: Vec<Vec<f32>>) -> Result<(), Box<dyn Error>> {
     
