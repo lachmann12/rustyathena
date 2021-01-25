@@ -262,11 +262,11 @@ fn mi_compute(a_splines_all: &Vec<Vec<usize>>, a_prob_all: &Vec<Vec<f32>>, a_ind
     
     let mut mi = 0.0;
     let sq = (1.0/bin_number as f32)*(1.0/bin_number as f32);
-    let norm = (gene_b.len() as f32);
+    let norm = gene_b.len() as f32;
     for k in 0..bin_number {
         for v in 0..bin_number {
             if bin_probs[k][v] != 0.0 {
-                let mut bp = bin_probs[k][v]/norm;
+                let bp = bin_probs[k][v]/norm;
                 mi += bp*((bp/sq).log2());
             }
         }
