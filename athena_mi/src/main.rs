@@ -32,6 +32,15 @@ pub fn cli<'a>() -> clap::ArgMatches<'a> {
           .help("The gene count input file with genes as rows and samples as columns")
       )
       .arg(
+        clap::Arg::with_name("output-file")
+          .value_name("OUTFILE")
+          .short("o")
+          .long("output-file")
+          .takes_value(true)
+          .required(true)
+          .help("The pairwise MI output")
+      )
+      .arg(
         clap::Arg::with_name("column-delimiter")
           .value_name("DELIMITER")
           .short("d")
@@ -82,6 +91,7 @@ pub fn cli<'a>() -> clap::ArgMatches<'a> {
 fn main() {
     let matches = cli();
     let input_file = matches.value_of("input-file").unwrap();
+    let output_file = matches.value_of("output-file").unwrap();
     let column_delimiter = matches.value_of("column-delimiter").unwrap_or("\t");
     let thread_count = matches.value_of("thread-number").unwrap_or("4").parse::<usize>().unwrap();
     let test_sample_count = matches.value_of("test-sample-count").unwrap_or("12").parse::<usize>().unwrap();
@@ -221,7 +231,7 @@ fn main() {
     println!("MI Time: {:.2}s", (now.elapsed().as_millis() as f32/1000.0));
 
     let now = Instant::now();
-    if let Err(e) = write_to_file("../files/mi_test_10k.csv", gene_names, mi_genes, mi_results) {
+    if let Err(e) = write_to_file(output_file, gene_names, mi_genes, mi_results) {
         eprintln!("{}", e)
     }
     println!("Print rank time: {}ms", now.elapsed().as_millis());
@@ -299,7 +309,7 @@ fn write_to_file(path: &str, genes: Vec<String>, mi_genes: Vec<usize>, data: Vec
     for i in 0..genes.len() {
         f.write_all(genes[i].as_bytes()).expect("Unable to write data");
         for j in 0..mi_genes.len() {
-            f.write_all("\t".as_bytes());
+            f.write_all("\t".as_bytes()).expect("Unable to write data");
             f.write_all((data[j][i].to_string()).as_bytes()).expect("Unable to write data");
         }
         f.write_all("\n".as_bytes()).expect("Unable to write data");
