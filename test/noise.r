@@ -4,6 +4,7 @@ library("rhdf5")
 h5ls("../Downloads/human_matrix_v9.h5")
 
 
+
 gexp = read.table("GitHub/rustyathena/files/human_10k.tsv", stringsAsFactors=F, sep="\t")
 ww = which(rowSums(gexp)/ncol(gexp) > 20)
 ww2 = rev(order(colSums(gexp)))
@@ -12,20 +13,56 @@ lexp = normalize.quantiles(log2(as.matrix(gexp)+1))
 rownames(lexp) = rownames(gexp)
 colnames(lexp) = colnames(gexp)
 
-sa = sample(1:nrow(lexp), 5000)
-exp = lexp[sa, ww2[1:3000]]
+sa = sample(1:nrow(lexp), 1000)
+exp = lexp[sa, ww2[1:1000]]
 
 cc = cor(t(exp))
 
 write.table(exp, file="GitHub/rustyathena/files/testexp.tsv", quote=F, sep="\t")
 
-)
-ct = c()
-for(t in 1:2){
-    ctime = Sys.time(
-    system(paste0("GitHub/rustyathena/athena_mi/target/release/athena_mi.exe -i GitHub/rustyathena/files/testexp.tsv -o GitHub/rustyathena/files/timeout.tsv -b 12 -t ",," -c 10000"))   
-    ct = c(ct, Sys.time()-ctime)
+ct = list()
+for(t in 1:12){
+    tt = c()
+    for(i in 1:10){
+        ctime = Sys.time()
+        system(paste0("GitHub/rustyathena/athena_mi/target/release/athena_mi.exe -i GitHub/rustyathena/files/testexp.tsv -o GitHub/rustyathena/files/timeout.tsv -b 12 -t ",t," -c 500"))   
+        tt = c(tt, Sys.time()-ctime)
+    }
+    ct[[length(ct)+1]] = tt
 }
+
+
+
+
+
+gexp = read.table("files/human_10k.tsv", stringsAsFactors=F, sep="\t")
+ww = which(rowSums(gexp)/ncol(gexp) > 20)
+ww2 = rev(order(colSums(gexp)))
+gexp = gexp[ww,]
+lexp = normalize.quantiles(log2(data.matrix(gexp)+1))
+rownames(lexp) = rownames(gexp)
+colnames(lexp) = colnames(gexp)
+
+sa = sample(1:nrow(lexp), 1000)
+exp = lexp[sa, ww2[1:1000]]
+
+#cc = cor(t(exp))
+
+write.table(exp, file="files/testexp.tsv", quote=F, sep="\t")
+
+ct = list()
+for(t in 1:12){
+    tt = c()
+    for(i in 1:10){
+        ctime = Sys.time()
+        system(paste0("athena_mi/target/release/athena_mi -i files/testexp.tsv -o files/timeout.tsv -b 12 -t ",t," -c 500"))
+        tt = c(tt, Sys.time()-ctime)
+    }
+    ct[[length(ct)+1]] = tt
+}
+
+
+
 
 system("GitHub/rustyathena/athena_mi/target/release/athena_mi.exe -i GitHub/rustyathena/files/testexp.tsv -o GitHub/rustyathena/files/testout6.tsv -b 6 -t 12 -c 10000")
 system("GitHub/rustyathena/athena_mi/target/release/athena_mi.exe -i GitHub/rustyathena/files/testexp.tsv -o GitHub/rustyathena/files/testout20.tsv -b 20 -t 12 -c 10000")

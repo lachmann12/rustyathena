@@ -125,7 +125,7 @@ fn main() {
                 }
                 else {
                     arr[j-1][i] = entry.parse().unwrap();
-                    arr[j-1][i] = arr[j-1][i] + rng.gen::<f32>()/100000.0;
+                    arr[j-1][i] = arr[j-1][i] + rng.gen::<f32>()/1000.0;
                 }
             }
         }
