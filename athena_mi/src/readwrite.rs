@@ -8,6 +8,7 @@ use rand::Rng;
 pub fn read_from_file(input_file: &str, sample_cutoff: usize, column_delimiter: &str) -> (Vec<String>, Vec<Vec<f32>>) {
 
     // open the file
+    println!("File: {}", input_file);
     let f = BufReader::new(File::open(input_file).unwrap());
     let nrows = f.lines().count()-1;
     let mut f = BufReader::new(File::open(input_file).unwrap());
