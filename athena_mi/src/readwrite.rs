@@ -1,11 +1,9 @@
 use std::cmp;
 use std::fs::File;
-use std::collections::HashSet;
 use std::iter::FromIterator;
 use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::error::Error;
 use rand::Rng;
-
 
 pub fn read_from_file(input_file: &str, sample_cutoff: usize, column_delimiter: &str) -> (Vec<String>, Vec<Vec<f32>>) {
 
@@ -47,9 +45,7 @@ pub fn read_from_file(input_file: &str, sample_cutoff: usize, column_delimiter: 
 pub fn read_regulators(input_file: &str, column_delimiter: &str, gene_names: Vec<String>) -> Vec<String> {
 
     let f = BufReader::new(File::open(input_file).unwrap());
-    let nrows = f.lines().count();
-    let mut f = BufReader::new(File::open(input_file).unwrap());
-
+    
     let mut regulators: Vec<String> = vec![];
     
     for (i, line) in f.lines().enumerate() {
