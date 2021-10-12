@@ -1,11 +1,13 @@
 use std::time::{Instant};
 
-
 mod cliparameters;
 mod readwrite;
 mod normalize;
 mod splinemi;
 mod fixedbandwidthmi;
+
+// "target/cargo build --release
+// "target/release/athena_mi.exe" -b 6 -i "../files/veryhigh_expression.tsv" -o "../files/temp_out.tsv" -t 12 -c 200  -m fixed
 
 fn main() {
 
